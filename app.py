@@ -84,14 +84,36 @@ def _load_any_model(path: str):
 
 @st.cache_resource
 def load_model_and_maps():
-    """Load model and supporting data with error handling."""
+    """Load model and supporting data, prioritizing real trained model."""
     try:
-        # Try SavedModel format first (more compatible), then .keras format
-        import os
-        if os.path.exists("models/model_savedmodel"):
-            model = _load_any_model("models/model_savedmodel")
-        else:
-            model = _load_any_model("models/model.keras")
+        # Try to load models in order of preference (real trained models first)
+        model_paths = [
+            "models/model_savedmodel",      # Best: SavedModel from Colab export
+            "models/model_new.keras",       # Good: New .keras from Colab
+            "models/model.h5",              # Backup: HDF5 from Colab
+            "models/model.keras"            # Last resort: Original (likely incompatible)
+        ]
+        
+        model = None
+        model_loaded = False
+        
+        for model_path in model_paths:
+            if os.path.exists(model_path):
+                model = _load_any_model(model_path)
+                if model is not None:
+                    # Test if model actually works
+                    try:
+                        test_input = np.random.random((1, 224, 224, 3))
+                        _ = model.predict(test_input, verbose=0)
+                        model_loaded = True
+                        break
+                    except:
+                        model = None
+                        continue
+        
+        # If no model loaded successfully, use fallback
+        if not model_loaded:
+            model = _create_fallback_model()
         
         # Load class indices
         with open("models/class_indices.json") as f:
@@ -101,13 +123,14 @@ def load_model_and_maps():
         info = pd.read_csv("models/disease_info.csv")
         info_map = {row["label"]: row for _, row in info.iterrows()}
         
-        return model, idx2lbl, info_map
+        return model, idx2lbl, info_map, model_loaded
         
     except Exception as e:
         st.error(f"Failed to load application data. Please refresh the page.")
+        return None, {}, {}, False
         raise
 
-model, idx2lbl, info_map = load_model_and_maps()
+model, idx2lbl, info_map, model_loaded = load_model_and_maps()
 IMG_SIZE = (192, 192)
 
 def preprocess(pil_img):
@@ -147,8 +170,34 @@ def show_report(lbl, conf):
 st.title("🌿 Crop Disease Detection")
 st.write("Upload an image or use your camera. The app predicts the disease and shows treatment & prevention tips.")
 
-# Warning about model compatibility
-st.warning("⚠️ **Model Compatibility Issue**: The original trained model cannot be loaded due to TensorFlow version incompatibility. Currently using a basic fallback model. For accurate predictions, the model needs to be retrained with compatible TensorFlow version.")
+# Show model status
+if not model_loaded:
+    st.warning("⚠️ **Using Fallback Model**: Your trained model couldn't be loaded. Upload your model files from Google Colab for accurate predictions! See instructions below.")
+    with st.expander("📋 How to Upload Your Trained Model"):
+        st.markdown("""
+        **Step 1: In your Google Colab, run this code:**
+        ```python
+        # Export your model in compatible formats
+        model.save('model_savedmodel', save_format='tf')  # Best format
+        model.save('model_new.keras')  # Backup format
+        model.save('model.h5')  # Alternative format
+        
+        # Download files
+        from google.colab import files
+        import shutil
+        shutil.make_archive('models', 'zip', '.')
+        files.download('models.zip')
+        ```
+        
+        **Step 2: Upload the files to your GitHub repo:**
+        - Extract the downloaded ZIP
+        - Replace files in your `models/` folder
+        - Commit and push to GitHub
+        
+        **Your app will automatically use the real trained model!** 🎯
+        """)
+else:
+    st.success("✅ **Real Trained Model Loaded**: Using your actual AI model for predictions!")
 
 # Clean interface - no status messages shown
 
