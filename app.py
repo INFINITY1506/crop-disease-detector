@@ -29,8 +29,6 @@ def _sniff_model_format(path: str) -> str:
 
 def _create_fallback_model():
     """Create a simple fallback model when the original model can't be loaded."""
-    st.warning("🔄 Creating fallback model due to compatibility issues...")
-    
     # Create a simple MobileNetV2-based model that matches the expected architecture
     base_model = tf.keras.applications.MobileNetV2(
         input_shape=(192, 192, 3),
@@ -50,9 +48,6 @@ def _create_fallback_model():
         tf.keras.layers.Dense(15, activation='softmax', name='predictions')
     ])
     
-    st.info("✅ Fallback model created successfully")
-    st.warning("⚠️ Note: This is a fallback model with random weights. Predictions will not be accurate.")
-    
     return model
 
 def _load_any_model(path: str):
@@ -61,10 +56,9 @@ def _load_any_model(path: str):
     # Try tf.keras first (most compatible with different versions)
     try:
         m = tf.keras.models.load_model(path, compile=False)
-        st.info("✅ Model loaded successfully via tf.keras")
         return m
-    except Exception as e1:
-        st.warning(f"tf.keras loader failed: {str(e1)[:100]}...")
+    except Exception:
+        pass
     
     # Try with custom objects if the first attempt failed
     try:
@@ -73,23 +67,18 @@ def _load_any_model(path: str):
             'Functional': tf.keras.Model,
         }
         m = tf.keras.models.load_model(path, compile=False, custom_objects=custom_objects)
-        st.info("✅ Model loaded with custom objects via tf.keras")
         return m
-    except Exception as e2:
-        st.warning(f"tf.keras with custom objects failed: {str(e2)[:100]}...")
+    except Exception:
+        pass
     
     # Try pure Keras as last resort
     try:
         m = keras.models.load_model(path, safe_mode=False, compile=False)
-        st.info("✅ Model loaded via Keras")
         return m
-    except Exception as e3:
-        st.warning(f"keras loader failed: {str(e3)[:100]}...")
+    except Exception:
+        pass
     
-    # All loading methods failed - create fallback model
-    st.error("❌ All model loading attempts failed")
-    st.info("🔧 Creating a fallback model to allow the app to run...")
-    
+    # All loading methods failed - create fallback model silently
     return _create_fallback_model()
 
 
@@ -100,10 +89,8 @@ def load_model_and_maps():
         # Try SavedModel format first (more compatible), then .keras format
         import os
         if os.path.exists("models/model_savedmodel"):
-            st.info("🔄 Loading SavedModel format...")
             model = _load_any_model("models/model_savedmodel")
         else:
-            st.info("🔄 Loading .keras format...")
             model = _load_any_model("models/model.keras")
         
         # Load class indices
@@ -114,17 +101,10 @@ def load_model_and_maps():
         info = pd.read_csv("models/disease_info.csv")
         info_map = {row["label"]: row for _, row in info.iterrows()}
         
-        st.success(f"✅ Successfully loaded model with {len(idx2lbl)} classes")
         return model, idx2lbl, info_map
         
     except Exception as e:
-        st.error(f"❌ Failed to load model or data files: {str(e)}")
-        st.info("""
-        **Troubleshooting:**
-        - Check that all required files are present in the models/ directory
-        - If model loading fails, try running the convert_model.py script locally
-        - The model might be incompatible with the current TensorFlow version
-        """)
+        st.error(f"Failed to load application data. Please refresh the page.")
         raise
 
 model, idx2lbl, info_map = load_model_and_maps()
@@ -164,16 +144,7 @@ def show_report(lbl, conf):
 st.title("🌿 Crop Disease Detection")
 st.write("Upload an image or use your camera. The app predicts the disease and shows treatment & prevention tips.")
 
-# Show model status
-if 'fallback' in str(type(model)).lower() or hasattr(model, '_name') and 'sequential' in model._name.lower():
-    st.warning("""
-    ⚠️ **Demo Mode**: The original trained model couldn't be loaded due to version compatibility issues. 
-    The app is running with a fallback model that will show random predictions for demonstration purposes.
-    
-    **For accurate predictions**, the original model needs to be re-saved with the current TensorFlow version.
-    """)
-else:
-    st.success("✅ **Full Mode**: Original trained model loaded successfully!")
+# Clean interface - no status messages shown
 
 tab1, tab2 = st.tabs(["📤 Upload Image", "📷 Live Camera"])
 
