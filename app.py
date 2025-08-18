@@ -27,6 +27,34 @@ def _sniff_model_format(path: str) -> str:
         return "h5"
     return "unknown"
 
+def _create_fallback_model():
+    """Create a simple fallback model when the original model can't be loaded."""
+    st.warning("🔄 Creating fallback model due to compatibility issues...")
+    
+    # Create a simple MobileNetV2-based model that matches the expected architecture
+    base_model = tf.keras.applications.MobileNetV2(
+        input_shape=(192, 192, 3),
+        alpha=1.0,
+        include_top=False,
+        weights='imagenet'
+    )
+    
+    # Add the same layers as the original model
+    model = tf.keras.Sequential([
+        tf.keras.layers.RandomFlip('horizontal'),
+        tf.keras.layers.RandomRotation(0.05),
+        tf.keras.layers.RandomZoom(0.1),
+        base_model,
+        tf.keras.layers.GlobalAveragePooling2D(),
+        tf.keras.layers.Dropout(0.2),
+        tf.keras.layers.Dense(15, activation='softmax', name='predictions')
+    ])
+    
+    st.info("✅ Fallback model created successfully")
+    st.warning("⚠️ Note: This is a fallback model with random weights. Predictions will not be accurate.")
+    
+    return model
+
 def _load_any_model(path: str):
     """Load model with maximum compatibility across TensorFlow/Keras versions."""
     
@@ -56,24 +84,13 @@ def _load_any_model(path: str):
         st.info("✅ Model loaded via Keras")
         return m
     except Exception as e3:
-        st.error("❌ All model loading attempts failed")
-        
-        # Show a more helpful error message
-        st.error("""
-        **Model Loading Error**: The model file appears to be incompatible with the current TensorFlow/Keras version.
-        
-        **Possible solutions:**
-        1. The model was saved with a different TensorFlow version
-        2. Try re-saving the model with the current TensorFlow version
-        3. Use TensorFlow SavedModel format instead of .keras format
-        """)
-        
-        raise RuntimeError(
-            f"Model loading failed with all methods. "
-            f"tf.keras: {str(e1)[:50]}... | "
-            f"custom_objects: {str(e2)[:50]}... | "
-            f"keras: {str(e3)[:50]}..."
-        )
+        st.warning(f"keras loader failed: {str(e3)[:100]}...")
+    
+    # All loading methods failed - create fallback model
+    st.error("❌ All model loading attempts failed")
+    st.info("🔧 Creating a fallback model to allow the app to run...")
+    
+    return _create_fallback_model()
 
 
 @st.cache_resource
@@ -146,6 +163,17 @@ def show_report(lbl, conf):
 
 st.title("🌿 Crop Disease Detection")
 st.write("Upload an image or use your camera. The app predicts the disease and shows treatment & prevention tips.")
+
+# Show model status
+if 'fallback' in str(type(model)).lower() or hasattr(model, '_name') and 'sequential' in model._name.lower():
+    st.warning("""
+    ⚠️ **Demo Mode**: The original trained model couldn't be loaded due to version compatibility issues. 
+    The app is running with a fallback model that will show random predictions for demonstration purposes.
+    
+    **For accurate predictions**, the original model needs to be re-saved with the current TensorFlow version.
+    """)
+else:
+    st.success("✅ **Full Mode**: Original trained model loaded successfully!")
 
 tab1, tab2 = st.tabs(["📤 Upload Image", "📷 Live Camera"])
 
