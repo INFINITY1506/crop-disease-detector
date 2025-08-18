@@ -80,8 +80,14 @@ def _load_any_model(path: str):
 def load_model_and_maps():
     """Load model and supporting data with error handling."""
     try:
-        # Load the model
-        model = _load_any_model("models/model.keras")
+        # Try SavedModel format first (more compatible), then .keras format
+        import os
+        if os.path.exists("models/model_savedmodel"):
+            st.info("🔄 Loading SavedModel format...")
+            model = _load_any_model("models/model_savedmodel")
+        else:
+            st.info("🔄 Loading .keras format...")
+            model = _load_any_model("models/model.keras")
         
         # Load class indices
         with open("models/class_indices.json") as f:
@@ -96,7 +102,12 @@ def load_model_and_maps():
         
     except Exception as e:
         st.error(f"❌ Failed to load model or data files: {str(e)}")
-        st.info("Please check that all required files are present in the models/ directory")
+        st.info("""
+        **Troubleshooting:**
+        - Check that all required files are present in the models/ directory
+        - If model loading fails, try running the convert_model.py script locally
+        - The model might be incompatible with the current TensorFlow version
+        """)
         raise
 
 model, idx2lbl, info_map = load_model_and_maps()
