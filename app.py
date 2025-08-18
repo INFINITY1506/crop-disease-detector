@@ -28,52 +28,76 @@ def _sniff_model_format(path: str) -> str:
     return "unknown"
 
 def _load_any_model(path: str):
-    fmt = _sniff_model_format(path)
-    # Prefer tf.keras for SavedModel dirs and H5
-    if fmt in ("savedmodel", "dir"):
-        try:
-            m = tf.keras.models.load_model(path, compile=False)
-            st.info("Loaded TensorFlow SavedModel/Directory via tf.keras.")
-            return m
-        except Exception as e:
-            st.warning(f"tf.keras SavedModel loader failed: {e}")
-    if fmt == "h5":
-        try:
-            m = tf.keras.models.load_model(path, compile=False)
-            st.info("Loaded H5 via tf.keras.")
-            return m
-        except Exception as e:
-            st.warning(f"tf.keras H5 loader failed: {e}")
-    # Default & .keras path: try Keras 3 first, then tf.keras fallback
+    """Load model with maximum compatibility across TensorFlow/Keras versions."""
+    
+    # Try tf.keras first (most compatible with different versions)
     try:
-        m = keras.models.load_model(path, safe_mode=False, compile=False)
-        st.info("Loaded .keras via Keras 3.")
+        m = tf.keras.models.load_model(path, compile=False)
+        st.info("✅ Model loaded successfully via tf.keras")
         return m
     except Exception as e1:
-        st.warning(f"Keras loader failed: {e1}. Trying tf.keras…")
-        try:
-            m = tf.keras.models.load_model(path, compile=False)
-            st.info("Loaded via tf.keras fallback.")
-            return m
-        except Exception as e2:
-            st.error("Couldn’t load model with either Keras or tf.keras.")
-            raise RuntimeError(
-                "Model load failed. First error (keras): " + str(e1) +
-                " | Second error (tf.keras): " + str(e2)
-            )
+        st.warning(f"tf.keras loader failed: {str(e1)[:100]}...")
+    
+    # Try with custom objects if the first attempt failed
+    try:
+        # Define custom objects that might be missing
+        custom_objects = {
+            'Functional': tf.keras.Model,
+        }
+        m = tf.keras.models.load_model(path, compile=False, custom_objects=custom_objects)
+        st.info("✅ Model loaded with custom objects via tf.keras")
+        return m
+    except Exception as e2:
+        st.warning(f"tf.keras with custom objects failed: {str(e2)[:100]}...")
+    
+    # Try pure Keras as last resort
+    try:
+        m = keras.models.load_model(path, safe_mode=False, compile=False)
+        st.info("✅ Model loaded via Keras")
+        return m
+    except Exception as e3:
+        st.error("❌ All model loading attempts failed")
+        
+        # Show a more helpful error message
+        st.error("""
+        **Model Loading Error**: The model file appears to be incompatible with the current TensorFlow/Keras version.
+        
+        **Possible solutions:**
+        1. The model was saved with a different TensorFlow version
+        2. Try re-saving the model with the current TensorFlow version
+        3. Use TensorFlow SavedModel format instead of .keras format
+        """)
+        
+        raise RuntimeError(
+            f"Model loading failed with all methods. "
+            f"tf.keras: {str(e1)[:50]}... | "
+            f"custom_objects: {str(e2)[:50]}... | "
+            f"keras: {str(e3)[:50]}..."
+        )
 
 
 @st.cache_resource
 def load_model_and_maps():
-    # Robust model loader that handles .keras (Keras 3), H5, and SavedModel
-    model = _load_any_model("models/model.keras")
-
-    with open("models/class_indices.json") as f:
-        idx2lbl = {int(k): v for k, v in json.load(f).items()}
-
-    info = pd.read_csv("models/disease_info.csv")
-    info_map = {row["label"]: row for _, row in info.iterrows()}
-    return model, idx2lbl, info_map
+    """Load model and supporting data with error handling."""
+    try:
+        # Load the model
+        model = _load_any_model("models/model.keras")
+        
+        # Load class indices
+        with open("models/class_indices.json") as f:
+            idx2lbl = {int(k): v for k, v in json.load(f).items()}
+        
+        # Load disease information
+        info = pd.read_csv("models/disease_info.csv")
+        info_map = {row["label"]: row for _, row in info.iterrows()}
+        
+        st.success(f"✅ Successfully loaded model with {len(idx2lbl)} classes")
+        return model, idx2lbl, info_map
+        
+    except Exception as e:
+        st.error(f"❌ Failed to load model or data files: {str(e)}")
+        st.info("Please check that all required files are present in the models/ directory")
+        raise
 
 model, idx2lbl, info_map = load_model_and_maps()
 IMG_SIZE = (192, 192)
