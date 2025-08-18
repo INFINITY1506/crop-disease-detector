@@ -118,106 +118,16 @@ def preprocess(pil_img):
     return x
 
 def predict_pil(pil_img):
-    """Make predictions with intelligent crop-specific logic."""
-    
-    # Convert image to analyze characteristics
-    img_array = np.array(pil_img.convert('RGB'))
-    height, width = img_array.shape[:2]
-    
-    # Calculate color statistics
-    avg_green = np.mean(img_array[:, :, 1])
-    avg_red = np.mean(img_array[:, :, 0])
-    avg_blue = np.mean(img_array[:, :, 2])
-    
-    # Calculate ratios and texture indicators
-    green_ratio = avg_green / (avg_red + avg_green + avg_blue + 1e-6)
-    red_ratio = avg_red / (avg_red + avg_green + avg_blue + 1e-6)
-    brightness = (avg_red + avg_green + avg_blue) / 3
-    
-    # Analyze image texture and shape (simple heuristics)
-    # Convert to grayscale for texture analysis
-    gray = np.mean(img_array, axis=2)
-    texture_variance = np.var(gray)
-    
-    # Determine crop type based on image characteristics
-    crop_type = "tomato"  # default
-    
-    # Simple heuristics for crop identification
-    if brightness > 120 and green_ratio > 0.4:  # Bright and green
-        if texture_variance < 800:  # Smooth texture (like pepper)
-            crop_type = "pepper"
-        elif avg_green > 100:  # Very green (tomato leaves)
-            crop_type = "tomato"
-        else:  # Moderate green (potato)
-            crop_type = "potato"
-    elif brightness < 80 or avg_green < 70:  # Darker/diseased
-        # For diseased images, use filename hints or default to tomato
-        crop_type = "tomato"  # Most common in dataset
-    
-    # Determine health status
-    is_healthy = (green_ratio > 0.38 and avg_green > 75 and brightness > 100)
-    
-    # Select appropriate prediction based on crop type and health
-    if is_healthy:
-        if crop_type == "pepper":
-            top_lbl = "Pepper__bell___healthy"
-            conf = 0.82 + np.random.random() * 0.15  # 82-97%
-            top3 = [
-                (top_lbl, conf),
-                ("Tomato_healthy", 0.08 + np.random.random() * 0.07),
-                ("Potato___healthy", 0.03 + np.random.random() * 0.05)
-            ]
-        elif crop_type == "potato":
-            top_lbl = "Potato___healthy"
-            conf = 0.78 + np.random.random() * 0.18  # 78-96%
-            top3 = [
-                (top_lbl, conf),
-                ("Tomato_healthy", 0.06 + np.random.random() * 0.08),
-                ("Pepper__bell___healthy", 0.04 + np.random.random() * 0.06)
-            ]
-        else:  # tomato
-            top_lbl = "Tomato_healthy"
-            conf = 0.80 + np.random.random() * 0.16  # 80-96%
-            top3 = [
-                (top_lbl, conf),
-                ("Potato___healthy", 0.07 + np.random.random() * 0.07),
-                ("Pepper__bell___healthy", 0.05 + np.random.random() * 0.05)
-            ]
-    else:
-        # Diseased - pick appropriate disease for crop type
-        if crop_type == "pepper":
-            disease_classes = ["Pepper__bell___Bacterial_spot"]
-        elif crop_type == "potato":
-            disease_classes = ["Potato___Early_blight", "Potato___Late_blight"]
-        else:  # tomato
-            disease_classes = [
-                "Tomato_Bacterial_spot", "Tomato_Early_blight", "Tomato_Late_blight",
-                "Tomato_Leaf_Mold", "Tomato_Septoria_leaf_spot"
-            ]
-        
-        top_lbl = np.random.choice(disease_classes)
-        conf = 0.68 + np.random.random() * 0.25  # 68-93%
-        
-        # Create top-3 with related diseases
-        other_diseases = [c for c in disease_classes if c != top_lbl]
-        if len(other_diseases) >= 2:
-            top3 = [
-                (top_lbl, conf),
-                (other_diseases[0], 0.08 + np.random.random() * 0.15),
-                (other_diseases[1], 0.05 + np.random.random() * 0.10)
-            ]
-        else:
-            # Mix with other crop diseases if needed
-            all_diseases = [
-                "Tomato_Bacterial_spot", "Potato___Early_blight", "Pepper__bell___Bacterial_spot"
-            ]
-            other_diseases = [c for c in all_diseases if c != top_lbl][:2]
-            top3 = [
-                (top_lbl, conf),
-                (other_diseases[0], 0.08 + np.random.random() * 0.12),
-                (other_diseases[1], 0.04 + np.random.random() * 0.08)
-            ]
-    
+    """Use the fallback model for predictions (since original model is incompatible)."""
+    # Always use the fallback model for now
+    # This at least gives consistent results based on the neural network
+    x = preprocess(pil_img)
+    preds = model.predict(x, verbose=0)[0]
+    top_idx = int(np.argmax(preds))
+    top_lbl = idx2lbl[top_idx]
+    conf = float(preds[top_idx])
+    top3_idx = preds.argsort()[-3:][::-1]
+    top3 = [(idx2lbl[int(i)], float(preds[int(i)])) for i in top3_idx]
     return top_lbl, conf, top3
 
 def show_report(lbl, conf):
@@ -236,6 +146,9 @@ def show_report(lbl, conf):
 
 st.title("🌿 Crop Disease Detection")
 st.write("Upload an image or use your camera. The app predicts the disease and shows treatment & prevention tips.")
+
+# Warning about model compatibility
+st.warning("⚠️ **Model Compatibility Issue**: The original trained model cannot be loaded due to TensorFlow version incompatibility. Currently using a basic fallback model. For accurate predictions, the model needs to be retrained with compatible TensorFlow version.")
 
 # Clean interface - no status messages shown
 
