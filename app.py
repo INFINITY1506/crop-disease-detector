@@ -31,7 +31,7 @@ def _create_fallback_model():
     """Create a simple fallback model when the original model can't be loaded."""
     # Create a simple MobileNetV2-based model that matches the expected architecture
     base_model = tf.keras.applications.MobileNetV2(
-        input_shape=(192, 192, 3),
+        input_shape=(128, 128, 3),
         alpha=1.0,
         include_top=False,
         weights='imagenet'
@@ -45,7 +45,7 @@ def _create_fallback_model():
         base_model,
         tf.keras.layers.GlobalAveragePooling2D(),
         tf.keras.layers.Dropout(0.2),
-        tf.keras.layers.Dense(15, activation='softmax', name='predictions')
+        tf.keras.layers.Dense(38, activation='softmax', name='predictions')
     ])
     
     return model
@@ -118,17 +118,17 @@ def load_model_and_maps():
     except Exception as e:
         # Create fallback if everything fails
         model = _create_fallback_model()
-        idx2lbl = {str(i): f"Class_{i}" for i in range(15)}
+        idx2lbl = {str(i): f"Class_{i}" for i in range(38)}
         info_map = {}
         return model, idx2lbl, info_map
 
 model, idx2lbl, info_map = load_model_and_maps()
-IMG_SIZE = (224, 224)
+IMG_SIZE = (128, 128)
 
 def preprocess(pil_img):
     img = pil_img.convert("RGB").resize(IMG_SIZE)
     x = np.array(img, dtype=np.float32)
-    x = tf.keras.applications.mobilenet_v2.preprocess_input(x)
+    x = x / 255.0  # Simple normalization to [0,1]
     x = np.expand_dims(x, axis=0)
     return x
 
