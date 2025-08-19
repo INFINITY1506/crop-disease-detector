@@ -154,18 +154,120 @@ def predict_pil(pil_img):
     return top_lbl, conf, top3
 
 def show_report(lbl, conf):
-    st.subheader(f"Prediction: {lbl} ({conf*100:.1f}%)")
+    st.subheader(f"🔬 Diagnosis: {lbl} ({conf*100:.1f}% confidence)")
+    
     info = info_map.get(lbl)
     if info is not None:
-        st.markdown(f"**Disease/Condition:** {info.get('title','')}")
-        st.markdown(f"**Description:** {info.get('description','')}")
-        st.markdown(f"**Treatment:** {info.get('treatment','')}")
-        st.markdown(f"**Prevention:** {info.get('prevention','')}")
-        ref = info.get('reference','')
-        if isinstance(ref, str) and ref.strip():
-            st.caption(f"Reference: {ref}")
+        title = info.get("title", "")
+        desc = info.get("description", "")
+        symptoms = info.get("symptoms", "")
+        causes = info.get("causes", "")
+        treatment = info.get("treatment", "")
+        prevention = info.get("prevention", "")
+        prognosis = info.get("prognosis", "")
+        economic_impact = info.get("economic_impact", "")
+        reference = info.get("reference", "")
+        
+        # Disease Title
+        if title.strip():
+            st.markdown(f"### 🌿 {title}")
+        
+        # Create tabs for organized information
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Overview", "💊 Treatment", "🛡️ Prevention", "📊 Impact"])
+        
+        with tab1:
+            if desc.strip():
+                st.markdown("**🔍 Disease Description:**")
+                st.write(desc)
+                st.write("")
+            
+            if symptoms.strip():
+                st.markdown("**🚨 Symptoms to Look For:**")
+                # Split symptoms by bullet points and display as list
+                symptom_lines = symptoms.split('•')
+                for symptom in symptom_lines[1:]:  # Skip first empty element
+                    if symptom.strip():
+                        st.write(f"• {symptom.strip()}")
+                st.write("")
+            
+            if causes.strip():
+                st.markdown("**🦠 Causes & Conditions:**")
+                cause_lines = causes.split('•')
+                for cause in cause_lines[1:]:
+                    if cause.strip():
+                        st.write(f"• {cause.strip()}")
+        
+        with tab2:
+            if treatment.strip():
+                st.markdown("**💊 Treatment Recommendations:**")
+                treatment_lines = treatment.split('•')
+                for treat in treatment_lines[1:]:
+                    if treat.strip():
+                        st.write(f"• {treat.strip()}")
+                
+                # Add urgency indicator
+                if 'healthy' not in lbl.lower():
+                    if 'Late_blight' in lbl or 'Yellow_Leaf_Curl' in lbl:
+                        st.error("⚠️ **URGENT**: This condition requires immediate attention to prevent severe losses!")
+                    elif 'Bacterial_spot' in lbl or 'Early_blight' in lbl:
+                        st.warning("⚡ **Action Needed**: Begin treatment promptly for best results.")
+                    else:
+                        st.info("📅 **Treatment Timeline**: Start management practices as soon as possible.")
+                else:
+                    st.success("✅ **Healthy Plant**: Continue current care practices!")
+        
+        with tab3:
+            if prevention.strip():
+                st.markdown("**🛡️ Prevention Strategies:**")
+                prevention_lines = prevention.split('•')
+                for prev in prevention_lines[1:]:
+                    if prev.strip():
+                        st.write(f"• {prev.strip()}")
+                
+                # Add seasonal tips
+                st.markdown("**🗓️ Seasonal Prevention Tips:**")
+                if 'healthy' not in lbl.lower():
+                    st.write("• **Spring**: Apply preventive treatments before disease season")
+                    st.write("• **Summer**: Monitor regularly and maintain good air circulation")
+                    st.write("• **Fall**: Remove crop debris and sanitize equipment")
+                    st.write("• **Winter**: Plan crop rotations and select resistant varieties")
+        
+        with tab4:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if prognosis.strip():
+                    st.markdown("**📈 Prognosis:**")
+                    st.write(prognosis)
+            
+            with col2:
+                if economic_impact.strip():
+                    st.markdown("**💰 Economic Impact:**")
+                    st.write(economic_impact)
+            
+            # Add severity indicator
+            if 'healthy' not in lbl.lower():
+                severity_score = 1  # Default low
+                if any(term in lbl for term in ['Late_blight', 'Yellow_Leaf_Curl', 'mosaic']):
+                    severity_score = 3  # High
+                elif any(term in lbl for term in ['Bacterial_spot', 'Early_blight', 'Target_Spot']):
+                    severity_score = 2  # Medium
+                
+                st.markdown("**🎯 Severity Level:**")
+                if severity_score == 3:
+                    st.error("🔴 **HIGH RISK** - Immediate action required")
+                elif severity_score == 2:
+                    st.warning("🟡 **MODERATE RISK** - Prompt treatment recommended")
+                else:
+                    st.info("🟢 **LOW-MODERATE RISK** - Monitor and treat as needed")
+        
+        # References
+        if reference.strip():
+            st.caption(f"📚 **References:** {reference}")
+    
     else:
-        st.info("No info entry found for this class. Edit assets/disease_info.csv to add details.")
+        st.warning("📋 Disease information not available. The system detected the condition but detailed information is not in the database.")
+        st.info("💡 **General Advice:** Consult with local agricultural extension services for specific treatment recommendations.")
 
 st.title("🌿 Crop Disease Detection")
 st.write("Upload an image or use your camera. The app predicts the disease and shows treatment & prevention tips.")
@@ -199,30 +301,17 @@ if not model_loaded:
 else:
     st.success("✅ **Real Trained Model Loaded**: Using your actual AI model for predictions!")
 
-# Clean interface - no status messages shown
+# Upload and analyze plant images
+st.markdown("### 📤 Upload Plant Image")
 
-tab1, tab2 = st.tabs(["📤 Upload Image", "📷 Live Camera"])
-
-with tab1:
-    f = st.file_uploader("Choose a leaf image", type=["jpg","jpeg","png","webp"])
-    if f is not None:
-        img = Image.open(f)
-        st.image(img, caption="Input", use_column_width=True)
-        lbl, conf, top3 = predict_pil(img)
-        show_report(lbl, conf)
-        with st.expander("Top-3 predictions"):
-            for l, c in top3:
-                st.write(f"{l}: {c*100:.1f}%")
-
-with tab2:
-    cam = st.camera_input("Take a photo")
-    if cam is not None:
-        img = Image.open(cam)
-        st.image(img, caption="Captured", use_column_width=True)
-        lbl, conf, top3 = predict_pil(img)
-        show_report(lbl, conf)
-        with st.expander("Top-3 predictions"):
-            for l, c in top3:
-                st.write(f"{l}: {c*100:.1f}%")
+f = st.file_uploader("Choose a leaf image", type=["jpg","jpeg","png","webp"])
+if f is not None:
+    img = Image.open(f)
+    st.image(img, caption="Input", use_column_width=True)
+    lbl, conf, top3 = predict_pil(img)
+    show_report(lbl, conf)
+    with st.expander("🔍 Top-3 predictions"):
+        for l, c in top3:
+            st.write(f"{l}: {c*100:.1f}%")
 
 st.caption("⚠️ Results are probabilistic. Confirm with local agronomy/extension services for critical decisions.")
